@@ -36,17 +36,20 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
     mode = 'bicycling'
     url = f'https://maps.googleapis.com/maps/api/directions/json?origin={start_lat},{start_lng}&destination={end_lat},{end_lng}&avoid={avoid}&mode={mode}&key={key}'
     resp = requests.get(url)
-    # # TODO: if status_code == 200 oder sowas hier einbauen
-    json_text = resp.json()
-    route = []
-    # Kinda confusing: API Calls expects (lat,lng). GeoJSON does [lng,lat] :(
-    route.append([start_lng, start_lat])
-    steps = json_text['routes'][0]['legs'][0]['steps']
-    for step in steps:
-        lat = step['end_location']['lat']
-        lng = step['end_location']['lng']
-        coord = [lng, lat]
-        route.append(coord)
+
+    if resp.status_code == 200:
+        json_text = resp.json()
+        route = []
+        # Kinda confusing: API Calls expects (lat,lng). GeoJSON does [lng,lat] :(
+        route.append([start_lng, start_lat])
+        steps = json_text['routes'][0]['legs'][0]['steps']
+        for step in steps:
+            lat = step['end_location']['lat']
+            lng = step['end_location']['lng']
+            coord = [lng, lat]
+            route.append(coord)
+    else:
+        print(f'Something went wrong: {resp.status_code}')
 
     return route
 
@@ -59,11 +62,11 @@ def read_routes_csv(path):
     return file
 
 
-def create_geojson_line(route):
+def create_geojson_line(route, properties):
     """
     Converts a list of coordinates into a geoJSON Feature
     """
-    return Feature(geometry=LineString(route))
+    return Feature(geometry=LineString(route), properties=properties)
 
 
 def create_feature_collection(feature_list):
@@ -78,18 +81,23 @@ if __name__ == '__main__':
     bike_routes = read_routes_csv('data/bike_routes.csv')
     routes_with_waypoints = []
     for bike_route in bike_routes[:15]:  # safety net for not calling 55k times
-        routes_with_waypoints.append(call_directions_api(
-            start_lat=float(bike_route[2]),
-            start_lng=float(bike_route[1]),
-            end_lat=float(bike_route[5]),
-            end_lng=float(bike_route[4])
-        ))
+        routes_with_waypoints.append(
+            [call_directions_api(
+                start_lat=float(bike_route[2]),
+                start_lng=float(bike_route[1]),
+                end_lat=float(bike_route[5]),
+                end_lng=float(bike_route[4])
+            ),
+            {'bike_name': bike_route[0], 'tour_start_at': bike_route[3]}
+        ])
 
     feature_list = []
     for route_with_waypoints in routes_with_waypoints:
-        feature_list.append(create_geojson_line(route_with_waypoints))
+        coords = route_with_waypoints[0]
+        props = route_with_waypoints[1]
+        feature_list.append(create_geojson_line(coords, props))
 
     feature_collection = create_feature_collection(feature_list)
 
-    with open('data/feature_collection.json', 'w') as f:
+    with open('data/feature_collection2.json', 'w') as f:
         f.write(json.dumps(feature_collection))
