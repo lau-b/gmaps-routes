@@ -25,8 +25,24 @@ def create_routes(df):
     df.drop(columns=['index', 'first_seen_at'], inplace=True)
     return df
 
+def create_parking_locations(df):
+    df.sort_values(['first_seen_at'], inplace=True)
+    df.reset_index(inplace=True)
+    df.drop(columns=['index', 'bike_number', 'last_seen_at'], inplace=True)
+    df.set_index('first_seen_at', inplace=True)
+    return df
+
 
 if __name__ == '__main__':
-    bike_locations = pd.read_csv('data/bike_locations.csv')
+    timeframe = '_20210301_20210314'
+    bike_locations = pd.read_csv(f'data/bike_locations{timeframe}.csv')
+    coordinates = create_parking_locations(bike_locations)
+    coordinates.to_csv(f'data/bike_parking_locations{timeframe}.csv')
+
+    # Anscheinend tranformieren die funktionen den bike_locations dataframe
+    bike_locations = pd.read_csv(f'data/bike_locations{timeframe}.csv')
     routes = create_routes(bike_locations)
-    routes.to_csv('data/bike_routes.csv', header=False, index=False)
+    routes.to_csv(f'data/bike_routes{timeframe}.csv',
+                header=False, index=False)
+
+
