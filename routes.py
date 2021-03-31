@@ -1,8 +1,9 @@
 import os
 import requests
 import json
+from tqdm import tqdm
 from dotenv import load_dotenv
-from geojson import Feature, FeatureCollection, LineString
+from geojson import Feature, FeatureCollection, LineString, Point
 
 
 def call_directions_api(start_lat, start_lng, end_lat, end_lng):
@@ -26,7 +27,6 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
     :start_lat: float
     :end_lng: float
     :end_lat: float
-    :resp_form: Accepted values xml and json. Default is json.
     """
 
     # set defaults. TODO: ist das mit dem API key hier richtig, oder pass?
@@ -48,13 +48,13 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
             lng = step['end_location']['lng']
             coord = [lng, lat]
             route.append(coord)
+            return route
     else:
         print(f'Something went wrong: {resp.status_code}')
+        # TODO: Add emegency safe if something goes wrong
 
-    return route
 
-
-def read_routes_csv(path):
+def read_csv(path):
     file = []
     with open(path, 'r') as f:
         for line in f:
@@ -69,6 +69,10 @@ def create_geojson_line(route, properties):
     return Feature(geometry=LineString(route), properties=properties)
 
 
+def create_geojson_point(lat, lng):
+    return Feature(geometry=Point((lng, lat)))
+
+
 def create_feature_collection(feature_list):
     return FeatureCollection(feature_list)
 
@@ -77,19 +81,23 @@ if __name__ == '__main__':
     load_dotenv('./.env')
     key = os.getenv('api_key')
 
-    # this file contains starting and destination coordinates
-    bike_routes = read_routes_csv('data/bike_routes.csv')
+    bike_routes = read_csv('data/bike_routes_20210301_20210314.csv')
     routes_with_waypoints = []
-    for bike_route in bike_routes[:15]:  # safety net for not calling 55k times
-        routes_with_waypoints.append(
-            [call_directions_api(
-                start_lat=float(bike_route[2]),
-                start_lng=float(bike_route[1]),
-                end_lat=float(bike_route[5]),
-                end_lng=float(bike_route[4])
-            ),
-            {'bike_name': bike_route[0], 'tour_start_at': bike_route[3]}
-        ])
+    for bike_route in tqdm(bike_routes):
+        route_with_waypoints = call_directions_api(
+            start_lat=float(bike_route[2]),
+            start_lng=float(bike_route[1]),
+            end_lat=float(bike_route[5]),
+            end_lng=float(bike_route[4])
+        )
+        if type(routes_with_waypoints) == list:
+            routes_with_waypoints.append(
+                [route_with_waypoints,
+                {'bike_name': bike_route[0], 'tour_start_at': bike_route[3]}
+            ])
+        else:
+            # I should probably include logging at this point
+            pass
 
     feature_list = []
     for route_with_waypoints in routes_with_waypoints:
@@ -99,5 +107,15 @@ if __name__ == '__main__':
 
     feature_collection = create_feature_collection(feature_list)
 
-    with open('data/feature_collection2.json', 'w') as f:
+    with open('data/routes_20210301_20210314.json', 'w') as f:
         f.write(json.dumps(feature_collection))
+
+
+    # bike_parking_spots = read_csv('data/coords_heatmap.csv')
+    # points_list = []
+    # for spot in bike_parking_spots[:1000]:
+    #     points_list.append(create_geojson_point(float(spot[0]), float(spot[1])))
+
+    # feature_coll_points = create_feature_collection(points_list)
+    # with open('data/feature_collection_points.json', 'w') as f:
+    #     f.write(json.dumps(feature_coll_points))
