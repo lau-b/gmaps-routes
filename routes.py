@@ -3,10 +3,10 @@ import requests
 import json
 from tqdm import tqdm
 from dotenv import load_dotenv
-from geojson import Feature, FeatureCollection, LineString, Point
+from geojson import Feature, FeatureCollection, LineString, Point, MultiLineString
 
 
-def call_directions_api(start_lat, start_lng, end_lat, end_lng):
+def call_directions_api(start_lat: float, start_lng: float, end_lat: float, end_lng: float):
     """
     Calls the Google Maps Directions API with longitude and latitude values
     for the starting location and destination.
@@ -29,7 +29,7 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
     :end_lat: float
     """
 
-    # set defaults. TODO: ist das mit dem API key hier richtig, oder pass?
+    # set defaults.
     load_dotenv('./.env')
     key = os.getenv('api_key')
     avoid = 'highways|ferries'
@@ -40,7 +40,6 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
     if resp.status_code == 200:
         json_text = resp.json()
         route = []
-        # Kinda confusing: API Calls expects (lat,lng). GeoJSON does [lng,lat] :(
         route.append([start_lng, start_lat])
         steps = json_text['routes'][0]['legs'][0]['steps']
         for step in steps:
@@ -48,11 +47,13 @@ def call_directions_api(start_lat, start_lng, end_lat, end_lng):
             lng = step['end_location']['lng']
             coord = [lng, lat]
             route.append(coord)
-            return route
+            # return route # TODO: do not return here but after the route list is complete. Put return after the else statement
     else:
         print(f'Something went wrong: {resp.status_code}')
         # TODO: Add emegency safe if something goes wrong
+        return 'the api didnt answer'# return nothing here because otherwise an empty list would be returned
 
+    return route
 
 def read_csv(path):
     file = []
@@ -68,6 +69,8 @@ def create_geojson_line(route, properties):
     """
     return Feature(geometry=LineString(route), properties=properties)
 
+def create_geojson_multiline(route, properties):
+    return Feature(geometry=MultiLineString(route), properties=properties)
 
 def create_geojson_point(lat, lng):
     return Feature(geometry=Point((lng, lat)))
@@ -90,7 +93,7 @@ if __name__ == '__main__':
             end_lat=float(bike_route[5]),
             end_lng=float(bike_route[4])
         )
-        if type(routes_with_waypoints) == list:
+        if type(route_with_waypoints) == list:
             routes_with_waypoints.append(
                 [route_with_waypoints,
                 {'bike_name': bike_route[0], 'tour_start_at': bike_route[3]}
@@ -104,6 +107,7 @@ if __name__ == '__main__':
         coords = route_with_waypoints[0]
         props = route_with_waypoints[1]
         feature_list.append(create_geojson_line(coords, props))
+        # feature_list.append(create_geojson_multiline(coords, props))
 
     feature_collection = create_feature_collection(feature_list)
 
